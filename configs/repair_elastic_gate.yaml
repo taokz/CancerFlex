@@ -1,0 +1,68 @@
+# One-shot repair of the elastic model (the released CancerFlex weights).
+# Mechanism: continue mixed-sandwich elastic training from runs/elastic_training/final for one
+# epoch of the corrected corpus, distilling from the repaired dense parent (runs/repair_dense/final)
+# with a correctness gate: at answer tokens where the frozen teacher's top-1 token differs from the
+# gold token the distillation term is dropped and the token trains on gold alone.
+#   torchrun --nproc_per_node 4 -m cancerflex.train.matformer_pure_main --config configs/repair_elastic_gate.yaml
+base_model_override: runs/elastic_training/final
+attn_impl:
+  text: sdpa
+  vision: eager
+vision_freeze: true
+train_scope: all
+corpus_dir: Experiment/datasets/v1_combined_repair
+train_subsample_n: null
+sampler_tau: null
+balance_temperature: null
+matformer_factor: 8
+sampling: mixed_sandwich
+granularity_weights: null
+mix_kind_weights:
+  uniform: 0.25
+  full: 0.15
+  mixed_iid: 0.3
+  mixed_banded: 0.3
+mix_high_late_bias: true
+sandwich_teacher_mode: frozen_initial
+sandwich_teacher_model_override: runs/repair_dense/final
+kd_correctness_gate: true
+kd_alpha: 0.5
+kd_temp: 2.0
+full_loss_weight: 2.0
+sandwich_n_random: 2
+sandwich_always_smallest: true
+sandwich_budget_levels:
+- 0.25
+- 0.375
+- 0.5
+- 0.625
+- 0.75
+sandwich_budget_min_utilization: 0.85
+sandwich_budget_groups: 8
+num_train_epochs: 1
+max_steps: 1731
+batch_size: 2
+grad_accum: 64
+lr: 1.0e-05
+warmup_ratio: 0.03
+lr_scheduler: cosine
+weight_decay: 0.0
+max_grad_norm: 1.0
+seed: 0
+gradient_checkpointing: true
+optim: adamw_torch_fused
+dataloader_num_workers: 14
+dataloader_prefetch_factor: 4
+max_seq_length: 4608
+resolution_aug_prob: 0.5
+resolution_aug_min_scale: 0.143
+resolution_aug_pillars:
+- oral
+save_strategy: steps
+save_steps: 100
+save_total_limit: 1
+logging_steps: 5
+use_wandb: false
+wandb_project: cancerflex
+run_name: repair_elastic_gate
+output_dir: runs/repair_elastic_gate

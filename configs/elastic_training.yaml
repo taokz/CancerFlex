@@ -1,0 +1,73 @@
+# Elastic (nested-width) training of CancerFlex, one full epoch.
+# Mechanism: the language decoder's SwiGLU feed-forward coordinates are importance-ordered first
+# (python -m cancerflex.train.neuron_rank_init, output runs/importance_permuted); then every update
+# trains the narrowest width, two heterogeneous per-layer width draws and the full-width anchor
+# ("mixed sandwich"), with knowledge distillation (kd_alpha 0.5) from the frozen dense parent.
+# Trained widths: 1280 / 2560 / 5120 / 10240 (full). Vision tower frozen. No learned router.
+#   torchrun --nproc_per_node 4 -m cancerflex.train.matformer_pure_main --config configs/elastic_training.yaml
+base_model_override: runs/importance_permuted
+attn_impl:           {text: sdpa, vision: eager}
+vision_freeze:       true
+train_scope:         all
+corpus_dir:          Experiment/datasets/v1_final_deleaked
+train_subsample_n:   null
+
+# Existing A2 implementation: balance task first, then pillar within task.
+sampler_tau:         0.5
+balance_temperature: null
+
+matformer_factor:    8
+sampling:            mixed_sandwich
+granularity_weights: null
+# INERT — READ BEFORE BELIEVING THIS LINE. `sandwich_budget_levels` is set below, and that
+# REPLACES this sampler: matformer_pure_main.py takes the budget-stratified branch and never
+# reads mix_kind_weights. The run did NOT draw 25% uniform / 15% full / 30% iid / 30% banded.
+# What it actually did: every random student is a heterogeneous draw from a budget pool, with
+# successive cycles alternating the full in-band pool and the adjacent-band/high-late pool, and
+# UNIFORM configs excluded from both — so the only uniform configs trained are the narrowest
+# (via sandwich_always_smallest) and the full one (the teacher). The line is kept, not deleted,
+# because it is what the config literally contained when the run executed.
+mix_kind_weights:    {uniform: 0.25, full: 0.15, mixed_iid: 0.30, mixed_banded: 0.30}
+mix_high_late_bias:  true
+
+# Frozen, unpermuted parent prevents early subnets from moving their own target.
+sandwich_teacher_mode:           frozen_initial
+sandwich_teacher_model_override: runs/dense_parent_stage2/final
+kd_alpha:            0.5
+kd_temp:             2.0
+full_loss_weight:    2.0
+
+# Every update: smallest + two heterogeneous draws + trainable full anchor.
+sandwich_n_random:   2
+sandwich_always_smallest: true
+sandwich_budget_levels:          [0.25, 0.375, 0.5, 0.625, 0.75]
+sandwich_budget_min_utilization: 0.85
+sandwich_budget_groups:          8
+
+# Four GPUs: 8 x accum2 x world4 = effective batch 64.
+num_train_epochs:    1
+max_steps:           -1
+batch_size:          8
+grad_accum:          2
+lr:                  5.0e-6
+warmup_ratio:        0.02
+lr_scheduler:        cosine
+weight_decay:        0.0
+max_grad_norm:       1.0
+seed:                0
+gradient_checkpointing: false
+optim:               adamw_torch_fused
+
+dataloader_num_workers: 8
+dataloader_prefetch_factor: 4
+max_seq_length:      1024
+
+save_strategy:       steps
+save_steps:          5000
+save_total_limit:    null
+logging_steps:       20
+
+use_wandb:           false
+wandb_project:       cancerflex
+run_name:            elastic_training
+output_dir:          runs/elastic_training

@@ -1,0 +1,46 @@
+# Dense parent, stage 1 (full-parameter SFT of MedGemma 1.5 4B).
+# Mechanism: plain supervised fine-tuning (no nested widths) over the U0-U6 multi-task corpus
+# with task x pillar temperature sampling (tau = 0.5): tasks are balanced first, then pillars
+# within a task, so that no single domain dominates the gradient.
+# Why: the dense parent is both the frozen teacher of the elastic model and the initialisation
+# of the dense comparator. Run with
+#   python -m cancerflex.train.sft_multitask_balanced --config configs/dense_parent_stage1.yaml
+# Paths are relative to CANCERFLEX_ROOT (data) / the working directory (runs/).
+arch: medgemma
+corpus_dir: Experiment/datasets/v1_final_deleaked
+output_dir: runs/dense_parent_stage1
+# INERT ON THIS HARNESS. `arm:` below routes this config to sft_multitask_balanced.py, which
+# never reads nproc (verified 2026-08-05: the only reader is sft_multitask.py:70). World size comes
+# from the external torchrun --nproc_per_node. Worse, the harness this key advertises would also
+# silently DROP `arm`, `sampler_tau` and `reweight` — sft_main.py reads none of them — so a run
+# launched that way would train unbalanced. Check the launcher, not this line.
+nproc: 4
+# --- arm = A2 (chosen) ---
+arm: a2
+sampler_tau: 0.5
+reweight: none
+# --- full-length (1 epoch, no max_steps cap) ---
+num_train_epochs: 1
+save_strategy: steps
+save_steps: 2000
+save_total_limit: 3
+# --- matched Phase-1 defaults ---
+# INERT ON THIS HARNESS, and the old comment implied otherwise. sft_multitask_balanced.py never
+# reads balance_temperature (verified 2026-08-05); setting a non-null value here would be silently
+# ignored rather than stacked or rejected. It IS live for the non-arm multitask_sft* configs, which
+# run through sft_multitask.py -> sft_main.py:126. Contrast matformer_pure_main.py, which reads both
+# knobs and RAISES when both are set — that is the pattern this harness lacks.
+balance_temperature: null
+batch_size: 16
+grad_accum: 1
+lr: 2.0e-5
+warmup_ratio: 0.03
+lr_scheduler: cosine
+max_seq_length: 1024
+vision_freeze: true
+attn_impl: eager
+gradient_checkpointing: true
+seed: 0
+use_wandb: true
+wandb_project: cancerflex
+run_name: dense_parent_stage1

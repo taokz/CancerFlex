@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cancerflex"
+version = "1.0.0"
+description = "Compact multimodal multi-cancer screening model with nested feed-forward widths (training, evaluation and inference code)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Kai Zhang", email = "kai.eric.zhang@gmail.com" }]
+dependencies = [
+  "torch==2.15.0",
+  "transformers==5.22.1",
+  "trl==1.17.1",
+  "datasets==5.1.0",
+  "accelerate==1.15.0",
+  "safetensors==0.8.0",
+  "pyyaml==6.0.3",
+  "numpy==2.5.4",
+  "pandas==3.1.1",
+  "pyarrow==26.0.1",
+  "pillow==13.0.0",
+  "scikit-learn==1.9.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.0.2", "ruff==0.15.0"]
+
+[project.scripts]
+cancerflex-infer = "cancerflex.infer:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501", "E402", "E731", "E741", "W605"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

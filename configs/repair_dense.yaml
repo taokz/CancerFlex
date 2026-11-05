@@ -1,0 +1,34 @@
+# One-shot repair of the dense parent on the corrected training corpus (dense comparator arm).
+# Mechanism: plain SFT for one epoch from runs/dense_parent_stage2/final on the union corpus in
+# which the corrected training labels are included. Output is the teacher of the elastic repair.
+#   python -m cancerflex.train.sft_multitask_balanced --config configs/repair_dense.yaml
+arch: medgemma
+init_from: runs/dense_parent_stage2/final
+corpus_dir: Experiment/datasets/v1_combined_repair
+output_dir: runs/repair_dense
+arm: a2
+sampler_tau: 1.0
+reweight: none
+balance_temperature: null
+max_steps: 1731
+num_train_epochs: 1
+lr: 1.0e-05
+warmup_ratio: 0.03
+lr_scheduler: cosine
+save_strategy: steps
+save_steps: 100
+save_total_limit: 1
+batch_size: 2
+grad_accum: 64
+max_seq_length: 4608
+resolution_aug_prob: 0.5
+resolution_aug_min_scale: 0.143
+resolution_aug_pillars:
+- oral
+vision_freeze: true
+attn_impl: eager
+gradient_checkpointing: true
+seed: 0
+use_wandb: false
+wandb_project: cancerflex
+run_name: repair_dense

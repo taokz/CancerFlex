@@ -1,0 +1,52 @@
+# Dense parent, stage 2 (continued SFT with two under-represented sources oversampled).
+# Mechanism: warm-start from runs/dense_parent_stage1/final and continue with the same balanced
+# sampler, oversampling two sources to 40 % of their cells. Output = the dense parent used as the
+# frozen distillation teacher for the elastic model and as the init of the dense repair arm.
+#   python -m cancerflex.train.sft_multitask_balanced --config configs/dense_parent_stage2_augdata.yaml
+arch: medgemma
+init_from: runs/dense_parent_stage1/final       # read-only warm-start source
+corpus_dir: Experiment/datasets/v1_final_deleaked         # shards now include Cairo + ThyroidXL
+output_dir: runs/dense_parent_stage2
+
+# --- arm = A2 (chosen phase-2 recipe) ---
+arm: a2
+sampler_tau: 0.5
+reweight: none
+# INERT ON THIS HARNESS, and the old comment implied otherwise. sft_multitask_balanced.py never
+# reads balance_temperature (verified 2026-08-05); setting a non-null value here would be silently
+# ignored rather than stacked or rejected. It IS live for the non-arm multitask_sft* configs, which
+# run through sft_multitask.py -> sft_main.py:126. Contrast matformer_pure_main.py, which reads both
+# knobs and RAISES when both are set — that is the pattern this harness lacks.
+balance_temperature: null
+
+# --- full-absorption continuation: oversample the new slice so it's ~40% of each
+#     batch → new rows seen ~1x within a short run (else at its natural ~7% it would
+#     need ~27k steps / ~60h on 1 GPU). Replay stays ~60% (majority) + saturated old
+#     data = near-no-op gradient → forgetting-safe. See session notes 2026-07-07.
+oversample_datasets: [CairoBDJ2025, ThyroidXL]            # the 4% added 2026-07-05 (oral + thyroid)
+oversample_frac: 0.40                                     # target new-slice share of the training mix
+# CORRECTED 2026-08-05: this file's own nproc 2 x batch_size 16 x grad_accum 2 gives eff-bs 64,
+#   NOT 32 -> 5000 steps x 64 = 320k samples, of which the ~40% new slice is ~128k = about 2x
+#   the 61k new rows, not ~1x. The 'new data seen once, so forgetting-safe' rationale was
+#   computed at eff-bs 32 and does not hold at the settings below. The measured post-hoc evals
+#   are unaffected; only this design rationale was wrong.
+max_steps: 5000
+num_train_epochs: 1                                       # ignored (max_steps>0 overrides)
+lr: 1.0e-5                                                 # LOW (half of a2_full's 2e-5) → forgetting-safe
+warmup_ratio: 0.05
+lr_scheduler: cosine
+save_strategy: steps
+save_steps: 1000
+save_total_limit: 6
+
+# --- matched phase-2 defaults ---
+batch_size: 16
+grad_accum: 2                                             # 2 GPU × 16 × 2 = eff-bs 64
+max_seq_length: 1024
+vision_freeze: true
+attn_impl: eager
+gradient_checkpointing: true
+seed: 0
+use_wandb: true
+wandb_project: cancerflex
+run_name: dense_parent_stage2
